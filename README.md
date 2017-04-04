@@ -1,5 +1,11 @@
-# itsmycrib
+# itselen sample project
 
-`curl -i -XPOST -H"Content-Type:application/json" -d'{"address":"56th street","phone":"0712345678"}' localhost:8080/crib`
+You can start here if you're building from scratch.
 
-`curl -i -H"Accept:application/json" localhost:8080/crib/ce4d5d4b-8646-4804-9601-8464c64f8cf6`
+Contains a demo plain application, Scala 3, cats 2, cats-effect 3, circe-config, scalafmt 3.
+
+## How to run:
+
+```
+sbt "itselen-simple/run"
+```

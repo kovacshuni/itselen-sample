@@ -4,3 +4,7 @@
 /project/project/
 /project/target/
 /target/
+.idea/
+.java-version
+*/target/
+dependencies.txt
