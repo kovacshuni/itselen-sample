@@ -1,86 +1,85 @@
 package com.hunorkovacs.itselen.simple
 
-import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import cats.Eq
-import cats.instances.long._
-import cats.syntax.eq._
-import cats.syntax.option._
-import java.util.Date
-import org.typelevel.log4cats._
-import org.typelevel.log4cats.slf4j._
+import scala.collection.immutable.Set
+import cats.Monoid
+import cats.instances.string._
+import cats.instances.int._
+import cats.instances.option._
+import cats.instances.either._
+import cats.syntax.semigroup._
 
 object ItsElenApp:
 
-  private val logger: SelfAwareStructuredLogger[IO] = LoggerFactory[IO].getLogger
-
   def main(args: Array[String]): Unit =
-    val circles: List[Circle]     = List(Circle(1.0d), Circle(2.0d))
-    val shapes: List[Shape]       = circles
-    val circleOpt: Option[Circle] = Option(Circle(3.0d))
-    val shapeOpt: Option[Shape]   = circleOpt
-    val circleMon: MyMon[Circle]  = MyMon(Circle(4.0d))
-    val shapeMon: MyMon[Shape]    = MyMon(Circle(4.0d))
-    val mycvShape: MyCv[Shape]    = new MyCv[Shape] {
-      override def write(s: Shape): String = s.name
-    }
-    val mycvCircle: MyCv[Circle]  = mycvShape
+    implicit def setMonoid[A]: MyMonoid[Set[A]] = setsUnionMonoid[A]
+    println(MyMonoid[Set[Int]].combine(Set(1, 2), Set(3, 4)))
+    println(Monoid[String].combine("Hi ", "there"))
+    println(Monoid[Int].combine(32, 10))
+    println(Monoid[Option[Int]].combine(Option(1), Option(2)))
+    println(Right(100).asInstanceOf[Either[Any, Int]] |+| Right(100).asInstanceOf[Either[Any, Int]] |+| Monoid[Either[Any, Int]].empty)
+    println(add(List(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)))
+    println(add(List(Option(1), Option(2), Option(3))))
 
-    println(mycvCircle.write(Circle(4.0d)))
-    println(format(Circle(4.0d), mycvCircle))
-    println(format(Circle(4.0d), mycvShape))
-    // println(format(Circle(4.0D).asInstanceOf[Shape], mycvCircle)) // can't do this
-    // MyCv[Shape] is a subtype of MyCv[Circle] because Circle is a subtype of Shape
-
-    val myIvCircle = new MyIv[Circle] {
-      override def ivWrite(c: Circle): String = c.name
-    }
-    val myIvShape  = new MyIv[Shape] {
-      override def ivWrite(s: Shape): String = s.name
-    }
-    println(ivFormat(Circle(4.0d), myIvCircle))
-    println(ivFormat(Circle(4.0d).asInstanceOf[Shape], myIvShape))
-    println(ivFormat(Circle(4.0d), myIvShape))
-    // println(ivFormat(Circle(4.0d).asInstanceOf[Shape], myIvCircle)) //nothing converts to nothing
+    implicit val implOrderMonoid = orderMonoid
+    println(add(List(Order(49.12, 32), Order(39.11, 1))))
 
 
-  implicit val dateEq: Eq[Date] =
-    Eq.instance[Date] { (date1, date2) => date1.getTime == date2.getTime }
+  def add[A: Monoid](items: List[A]): A =
+    items.fold(Monoid[A].empty)(Monoid[A].combine)
 
-  final case class Cat(name: String, age: Int, color: String)
+case class Order(totalCost: Double, quantity: Double)
 
-  val cat1 = Cat("Garfield", 38, "orange and black")
-  val cat2 = Cat("Heathcliff", 33, "orange and black")
+trait MySemigroup[A] {
+  def combine(x: A, y: A): A
+}
 
-  implicit val catEq: Eq[Cat] =
-    Eq.instance[Cat] { (cat1, cat2) =>
-      cat1.age == cat2.age &&
-      cat1.color == cat2.color &&
-      cat1.name == cat2.name
-    }
+trait MyMonoid[A] extends MySemigroup[A]:
+  def empty: A
 
-  sealed trait Shape {
-    def name: String
-  }
+def associativeLaw[A](x: A, y: A, z: A)(implicit m: MySemigroup[A]): Boolean =
+  m.combine(x, m.combine(y, z)) == m.combine(m.combine(x, y), z)
 
-  case class Circle(radius: Double) extends Shape {
-    override def name: String = s"Circle with radius=$radius"
-  }
+def identityLaw[A](x: A)(implicit m: MyMonoid[A]): Boolean =
+  m.combine(x, m.empty) == x && m.combine(m.empty, x) == x
 
-  case class MyMon[+A](a: A) // covariance
+object MyMonoid:
+  def apply[A](implicit monoid: MyMonoid[A]) = monoid
 
-  trait MyCv[-A] { // contravariance
-    def write(a: A): String
-  }
+class BooleanAndMonoid extends MyMonoid[Boolean]:
+  override def combine(x: Boolean, y: Boolean): Boolean = x && y
 
-  class ShapeWriter extends MyCv[Shape] {
-    override def write(shape: Shape): String = s"Shape ${shape.name}"
-  }
+  override def empty: Boolean = true
 
-  def format[A](a: A, aCv: MyCv[A]): String = aCv.write(a)
+class BooleanOrMonoid extends MyMonoid[Boolean]:
+  override def combine(x: Boolean, y: Boolean): Boolean = x || y
 
-  trait MyIv[A] {
-    def ivWrite(a: A): String
-  }
+  override def empty: Boolean = false
 
-  def ivFormat[A](a: A, aIv: MyIv[A]): String = aIv.ivWrite(a)
+class BooleanEitherMonoid extends MyMonoid[Boolean]:
+  override def combine(x: Boolean, y: Boolean): Boolean = (x && !y) || (!x && y)
+
+  override def empty: Boolean = false
+
+class BooleanXNorMonoid extends MyMonoid[Boolean]:
+  override def combine(x: Boolean, y: Boolean): Boolean = (!x || y) && (x || !y)
+
+  override def empty: Boolean = true
+
+def setsUnionMonoid[A]: MyMonoid[Set[A]] = new MyMonoid[Set[A]]:
+  override def combine(a: Set[A], b: Set[A]): Set[A] = a.union(b)
+
+  override def empty: Set[A] = Set.empty
+
+def setsIntersectionSemigroup[A]: MySemigroup[Set[A]] = new MySemigroup[Set[A]]:
+  override def combine(a: Set[A], b: Set[A]): Set[A] = a.intersect(b)
+
+def symDiffMonoid[A]: MyMonoid[Set[A]] = new MyMonoid[Set[A]]:
+  override def combine(a: Set[A], b: Set[A]): Set[A] =
+    (a diff b).union(b diff a)
+
+  override def empty: Set[A] = Set.empty
+
+def orderMonoid: Monoid[Order] = new Monoid[Order]:
+  override def combine(x: Order, y: Order): Order = Order(x.totalCost + y.totalCost, x.quantity + y.quantity)
+
+  override def empty: Order = Order(0.0D, 0.0D)
